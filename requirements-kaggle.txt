@@ -1,0 +1,18 @@
+# Kaggle (GPU notebook): torch/torchvision/numpy/pandas/matplotlib/scikit-* come preinstalled
+# with CUDA -- do NOT install torch here. Install the project itself with:
+#   pip install -r requirements-kaggle.txt && pip install --no-deps -e .
+onnx
+onnxruntime-gpu
+insightface==0.7.3
+onnx2torch
+lpips
+opencv-python-headless
+scikit-image
+scikit-learn
+scipy
+seaborn
+pyyaml
+tqdm
+huggingface_hub
+requests
+gradio
