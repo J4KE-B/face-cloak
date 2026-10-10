@@ -36,13 +36,14 @@ killtree() {  # kill a process and all its descendants
 }
 
 cleanup() {
-  trap - EXIT INT TERM
+  trap - EXIT INT TERM HUP QUIT
   echo; echo "Stopping tunnel and backend..."
   for pid in "${PIDS[@]:-}"; do [[ -n "$pid" ]] && killtree "$pid"; done
   wait 2>/dev/null || true
   rm -rf "$LOGDIR"
 }
-trap cleanup EXIT INT TERM
+# HUP matters: closing the terminal (or the parent shell dying) must not leave the public tunnel running.
+trap cleanup EXIT INT TERM HUP QUIT
 
 # cloudflared: pinned official release binary, sha256-verified (never "latest")
 CF="$BIN/cloudflared-$CF_VERSION"
