@@ -1,0 +1,162 @@
+\documentclass[aspectratio=169]{beamer}
+\IfFileExists{beamerthememetropolis.sty}{\usetheme{metropolis}}{\usetheme{Madrid}}
+\usepackage{booktabs}
+
+\graphicspath{{../results/figs/}}
+
+\title{Adversarial Image Cloaking for Protection Against Face-Swap Attacks}
+\author{Jacob Antony Jeejo \and Team Member 2 \and Team Member 3}
+\institute{Indian Institute of Information Technology Kottayam}
+\date{}
+
+\begin{document}
+
+\begin{frame}
+    \titlepage
+\end{frame}
+
+\begin{frame}{The Threat: Face-Swap Deepfakes}
+    \begin{itemize}
+        \item %TODO: add points
+        \item Threat 1
+        \item Threat 2
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{How Face Swapping Works}
+    \begin{itemize}
+        \item %TODO: details
+        \item Step 1
+        \item Step 2
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Our Idea: Identity Cloaking}
+    \begin{itemize}
+        \item %TODO
+        \item Cloaking idea
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Threat Model}
+    \begin{itemize}
+        \item %TODO
+        \item Attacker capabilities
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Method Pipeline}
+    \begin{itemize}
+        \item %TODO
+        \item Pipeline stages
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{PGD Objective}
+    The PGD objective function:
+    \begin{equation}
+    \delta^* = \arg\min_{\|\delta\|_\infty \le \epsilon} \sum_k w_k \cos\big(E_k(A(x+\delta)), E_k(A(x))\big)
+    \end{equation}
+\end{frame}
+
+\begin{frame}{EOT and Perceptual Constraint}
+    \begin{itemize}
+        \item %TODO
+        \item EOT implementation
+        \item LPIPS constraint
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Experimental Setup}
+    \begin{itemize}
+        \item %TODO
+        \item Datasets and models
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: Protection Success}
+    \begin{itemize}
+        \item %TODO
+        \item Success metrics
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: Imperceptibility}
+    \begin{itemize}
+        \item %TODO
+        \item Image quality evaluation
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Results: Robustness}
+    \begin{itemize}
+        \item %TODO
+        \item Robustness tests
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{$\varepsilon$ Ablation}
+    \begin{itemize}
+        \item %TODO
+        \item Effect of epsilon
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Black-box Transfer (SimSwap)}
+    \begin{itemize}
+        \item %TODO
+        \item Transferability to SimSwap
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Live Demo}
+    \begin{itemize}
+        \item %TODO
+        \item Live demonstration
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Limitations and Ethics}
+    \begin{itemize}
+        \item %TODO
+        \item Ethical considerations
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Conclusion}
+    \begin{itemize}
+        \item %TODO
+        \item Summary
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Contributions}
+    \begin{table}
+        \centering
+        \begin{tabular}{ll}
+            \toprule
+            \textbf{Member} & \textbf{Contribution} \\
+            \midrule
+            Jacob Antony Jeejo & \\ %TODO
+            Team Member 2 & \\ %TODO
+            Team Member 3 & \\ %TODO
+            \bottomrule
+        \end{tabular}
+    \end{table}
+\end{frame}
+
+\begin{frame}{References}
+    \begin{itemize}
+        \item \textit{Fawkes: Protecting Privacy against Unauthorized Deep Learning Models}, Shan et al.
+        \item \textit{SimSwap: An Efficient Framework For High Fidelity Face Swapping}, Chen et al.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Questions}
+    \centering
+    \Huge Thank You! \\
+    \vspace{1cm}
+    \Large Questions?
+\end{frame}
+
+\end{document}

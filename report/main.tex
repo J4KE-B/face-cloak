@@ -1,0 +1,110 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{xcolor}
+\usepackage{siunitx}
+
+\graphicspath{{../results/figs/}}
+
+\title{Adversarial Image Cloaking for Protection Against Face-Swap Attacks}
+
+\author{
+\IEEEauthorblockN{Jacob Antony Jeejo}
+\IEEEauthorblockA{\textit{Indian Institute of Information Technology Kottayam}}
+\and
+\IEEEauthorblockN{Team Member 2}
+\IEEEauthorblockA{\textit{Indian Institute of Information Technology Kottayam}}
+\and
+\IEEEauthorblockN{Team Member 3}
+\IEEEauthorblockA{\textit{Indian Institute of Information Technology Kottayam}}
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+%TODO: Write abstract
+This paper proposes a proactive defense mechanism against face-swap deepfakes by imperceptibly altering the source images to degrade the output quality of malicious models.
+\end{abstract}
+
+\section{Introduction}
+%TODO: Write introduction
+With the rapid advancements in generative AI, face-swap attacks pose significant privacy and security threats. We introduce a cloaking method based on adversarial perturbations to protect users from unauthorized manipulation.
+
+\section{Related Work}
+\subsection{Face Swapping}
+%TODO: Describe face swapping methods
+Recent models like SimSwap~\cite{chen2020simswap} and FaceShifter~\cite{li2019faceshifter} allow high-fidelity identity transfer.
+
+\subsection{Proactive Defenses against Deepfakes}
+%TODO: Proactive defenses
+Methods such as Disrupting Deepfakes~\cite{ruiz2020disrupting} and Anti-Forgery~\cite{wang2022anti} have explored proactive manipulation against deepfakes, alongside CMUA-Watermark~\cite{huang2022cmua} for model-agnostic protection. Additional methods like PhotoGuard~\cite{salman2023photoguard} and Anti-DreamBooth~\cite{vanle2023anti} protect against broader AI editing.
+
+\subsection{Anti-Face-Recognition Cloaking}
+%TODO: Anti-FR cloaking
+Fawkes~\cite{shan2020fawkes} and LowKey~\cite{cherepanova2021lowkey} are prominent works in cloaking identities against facial recognition systems, utilizing tools such as ArcFace~\cite{deng2019arcface} and InsightFace~\cite{insightface}.
+
+\subsection{Purification and Adaptive Attacks}
+%TODO: Purification
+Diffusion-based purifications like DiffPure~\cite{nie2022diffpure} can potentially reduce adversarial effects, and gradient masking poses challenges as highlighted by BPDA~\cite{athalye2018obfuscated}.
+
+\section{Threat Model}
+%TODO: Threat model details
+We assume the attacker has access to a face-swapping model and utilizes publicly available photos. The defender aims to release visually unaltered photos.
+
+\section{Method}
+\subsection{Identity-Embedding Attack}
+%TODO: ID attack
+To prevent face swapping, we disrupt the identity embeddings extracted by models such as FaceNet~\cite{schroff2015facenet} and Partial FC~\cite{an2021partial}.
+
+\subsection{Differentiable Alignment}
+%TODO: Alignment
+We incorporate differentiable face alignment using methods based on standard pipelines like SCRFD~\cite{guo2022sample}.
+
+\subsection{Ensemble and Targeted Objective}
+%TODO: Ensemble objective
+The PGD~\cite{madry2018towards} objective function is defined as:
+\begin{equation}
+\delta^* = \arg\min_{\|\delta\|_\infty \le \epsilon} \sum_k w_k \cos\big(E_k(A(x+\delta)), E_k(A(x))\big)
+\end{equation}
+
+\subsection{Expectation over Transformation}
+%TODO: EOT
+To improve robustness against image transformations, we use Expectation over Transformation (EOT)~\cite{athalye2018synthesizing} across resizing, blurring, and JPEG compression.
+
+\subsection{Perceptual Constraint}
+%TODO: Perceptual
+To maintain image quality, we utilize the LPIPS~\cite{zhang2018unreasonable} metric alongside traditional bounds like FGSM~\cite{goodfellow2015explaining} and other properties~\cite{szegedy2014intriguing}.
+
+\section{Experimental Setup}
+%TODO: Experimental setup
+Our experiments are conducted on datasets such as LFW~\cite{huang2007labeled}, VGGFace2~\cite{cao2018vggface2}, and FaceForensics++~\cite{rossler2019faceforensics}, commonly reviewed in deepfake surveys~\cite{tolosana2020deepfakes}.
+
+\section{Results}
+%TODO: Results discussion
+Our method successfully degrades the output quality of face-swapping attempts while retaining high visual quality.
+% \input{../results/tables/main.tex}
+
+\section{Discussion and Limitations}
+%TODO: Discussion
+While effective against current models, the defense can potentially be bypassed by advanced purification.
+
+\section{Ethical Considerations}
+%TODO: Ethics
+This work is intended to protect user privacy against malicious manipulations and does not aim to improve attacking capabilities.
+
+\section{Conclusion}
+%TODO: Conclusion
+We presented a novel adversarial cloaking technique providing strong robustness against face-swap models.
+
+\nocite{*}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}
