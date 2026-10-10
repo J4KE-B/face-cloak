@@ -1,0 +1,14 @@
+# Tiny end-to-end check (5 sources). Run by the orchestrator, not in CI.
+name: smoke
+manifest: data/manifest_smoke.json
+n_targets_per_src: 1
+seed: 0
+device: auto
+swappers: [inswapper]
+transforms: [none, jpeg75]
+judges: [glintr100, w600k_r50]
+whitebox_judges: [w600k_r50]   # judges that coincide with an attack model (reported as white-box)
+attacks:
+  clean: {}
+  noise: {eps: 8}
+  pgd_r50: {eps: 8, steps: 20, models: {w600k_r50: 1.0}}

@@ -1,0 +1,37 @@
+# Full experiment: 150 sources x 3 targets, 8 attacks, 10 transforms, 2 swappers, 3 judges.
+name: main
+manifest: data/manifest.json
+n_targets_per_src: 3
+seed: 0
+device: auto
+swappers: [inswapper, simswap]
+transforms: [none, jpeg90, jpeg75, jpeg50, resize0.75, resize0.5, blur1, blur2, median3, bilateral]
+judges: [glintr100, w600k_mbf, w600k_r50]
+whitebox_judges: [w600k_r50]
+attacks:
+  clean: {}
+  noise: {eps: 8}
+  pgd_r50: {eps: 8, steps: 100, models: {w600k_r50: 1.0}}
+  pgd_ens: {eps: 8, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  pgd_ens_targeted:
+    eps: 8
+    steps: 100
+    models: {w600k_r50: 1.0, facenet_vggface2: 1.0}
+    mode: both
+    targeted_weight: 1.0
+  pgd_ens_eot:
+    eps: 8
+    steps: 100
+    models: {w600k_r50: 1.0, facenet_vggface2: 1.0}
+    eot: {}            # empty dict = DEFAULT_EOT
+  pgd_ens_eot_lpips:
+    eps: 8
+    steps: 100
+    models: {w600k_r50: 1.0, facenet_vggface2: 1.0}
+    eot: {}
+    lpips_weight: 1.0
+  pgd_ens_det:
+    eps: 8
+    steps: 100
+    models: {w600k_r50: 1.0, facenet_vggface2: 1.0}
+    det_weight: 1.0

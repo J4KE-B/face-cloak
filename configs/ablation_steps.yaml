@@ -1,0 +1,14 @@
+# Ablation over PGD steps for the ensemble attack. 150 sources x 3 targets.
+name: ablation_steps
+manifest: data/manifest.json
+n_targets_per_src: 3
+seed: 0
+device: auto
+swappers: [inswapper]
+transforms: [none, jpeg75]
+judges: [glintr100, w600k_mbf, w600k_r50]
+whitebox_judges: [w600k_r50]
+attacks:
+  pgd_ens_steps20: {eps: 8, steps: 20, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  pgd_ens_steps50: {eps: 8, steps: 50, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  pgd_ens_steps100: {eps: 8, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
