@@ -99,11 +99,15 @@ MANIFEST: dict[str, Weight] = {
     "simswap_checkpoints": Weight(
         urls=("https://github.com/neuralchen/SimSwap/releases/download/1.0/checkpoints.zip",),
         path="simswap/checkpoints.zip",
+        sha256="0593544d9401d6bf28247932466b54e98a79139e328e3ab3ec1c541c5efc6ee8",
+        extract_to="simswap/checkpoints/people",
+        members={"latest_net_G.pth": "24caf144e9aabd5acd1127b06f13ed3528240adb9e747d77a94ac3f33e672330"},
         kaggle_only=True,
     ),
     "simswap_arcface": Weight(
         urls=("https://github.com/neuralchen/SimSwap/releases/download/1.0/arcface_checkpoint.tar",),
         path="simswap/arcface_checkpoint.tar",
+        sha256="52ea5ce4902017b77a2bb811dd9a82f57dee3883e06c18a42d288437263c7a20",
         kaggle_only=True,
     ),
 }
