@@ -1,0 +1,30 @@
+# env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+# model weights & data (never public)
+weights/
+data/
+*.onnx
+*.pth
+*.pt
+*.tar
+*.zip
+# results
+results/raw/
+results/cache/
+# latex
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.nav
+*.snm
+*.synctex.gz
+# misc
+.gradio/
+flagged/
+.DS_Store
