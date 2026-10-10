@@ -238,7 +238,9 @@ name = "face-cloak"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fastapi" },
     { name = "gradio" },
+    { name = "httpx" },
     { name = "huggingface-hub" },
     { name = "insightface" },
     { name = "lpips" },
@@ -249,6 +251,8 @@ dependencies = [
     { name = "onnxruntime" },
     { name = "opencv-python-headless" },
     { name = "pandas" },
+    { name = "pillow" },
+    { name = "python-multipart" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "scikit-image" },
@@ -260,6 +264,7 @@ dependencies = [
     { name = "torchvision", version = "0.29.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform == 'darwin'" },
     { name = "torchvision", version = "0.29.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "tqdm" },
+    { name = "uvicorn" },
 ]
 
 [package.dev-dependencies]
@@ -271,7 +276,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fastapi", specifier = ">=0.143.0" },
     { name = "gradio", specifier = ">=6.30.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "huggingface-hub", specifier = ">=2.2.0" },
     { name = "insightface", specifier = "==0.7.3" },
     { name = "lpips", specifier = ">=0.1.4" },
@@ -282,6 +289,8 @@ requires-dist = [
     { name = "onnxruntime", specifier = ">=1.31.0" },
     { name = "opencv-python-headless", specifier = ">=5.0.0.93" },
     { name = "pandas", specifier = ">=3.0.6" },
+    { name = "pillow", specifier = ">=12.3.0" },
+    { name = "python-multipart", specifier = ">=0.0.32" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", specifier = ">=2.34.2" },
     { name = "scikit-image", specifier = ">=0.26.0" },
@@ -291,6 +300,7 @@ requires-dist = [
     { name = "torch", specifier = ">=2.14.1", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", specifier = ">=0.29.1", index = "https://download.pytorch.org/whl/cpu" },
     { name = "tqdm", specifier = ">=4.70.1" },
+    { name = "uvicorn", specifier = ">=0.54.0" },
 ]
 
 [package.metadata.requires-dev]

@@ -54,3 +54,12 @@ def test_resumable_csv_drops_truncated_last_line(tmp_path):
     assert csv_.done_keys() == {("1",), ("2",)}
     csv_.append({"id": 3, "val": "c"})
     assert path.read_text() == "id,val\n1,a\n2,b\n3,c\n"
+
+
+def test_write_png_atomic_overwrite_leaves_no_temp(tmp_path):
+    pytest.importorskip("cv2")
+    p = tmp_path / "sub" / "a.png"
+    for v in (10, 20):
+        write_png(str(p), np.full((8, 8, 3), v, np.uint8))
+    assert read_rgb(str(p))[0, 0, 0] == 20
+    assert [f.name for f in p.parent.iterdir()] == ["a.png"]

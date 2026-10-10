@@ -12,13 +12,34 @@ def read_rgb(path: str) -> np.ndarray:
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
 def write_png(path: str, img: np.ndarray):
-    """Write an RGB uint8 image to path as PNG."""
+    """Write an RGB uint8 image to path as PNG, atomically (temp file in the same dir + os.replace),
+    so a killed run never leaves a truncated PNG that a resume would trust."""
     import cv2
-    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    path = os.path.abspath(path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    success = cv2.imwrite(path, img_bgr)
-    if not success:
-        raise OSError(f"Failed to write image to {path}")
+    tmp = f"{path[:-4] if path.lower().endswith('.png') else path}.tmp{os.getpid()}.png"
+    try:
+        if not cv2.imwrite(tmp, img_bgr):
+            raise OSError(f"Failed to write image to {path}")
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+def write_json_atomic(path: str, obj) -> None:
+    """Write JSON atomically (temp + os.replace)."""
+    import json
+    path = os.path.abspath(path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.tmp{os.getpid()}"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(obj, f)
+        os.replace(tmp, path)
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
 
 def to_tensor(img: np.ndarray):
     """Convert uint8 HWC image to float32 (1, 3, H, W) tensor in [0, 1]."""

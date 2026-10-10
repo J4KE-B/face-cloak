@@ -121,7 +121,9 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
-def _download(url: str, dest: Path) -> None:
+def _download(url: str, dest: Path, sha256: str | None = None) -> str:
+    """Download to ``dest`` atomically; the digest is verified on the ``.part`` file BEFORE the rename,
+    so a tampered / truncated download never appears under the final name. Returns the digest."""
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
     with requests.get(url, stream=True, timeout=(15, 60), allow_redirects=True) as r:
@@ -133,7 +135,12 @@ def _download(url: str, dest: Path) -> None:
             for chunk in r.iter_content(1 << 20):
                 f.write(chunk)
                 bar.update(len(chunk))
+    digest = sha256_file(tmp)
+    if sha256 and digest != sha256:
+        tmp.unlink(missing_ok=True)
+        raise ValueError(f"sha256 mismatch: got {digest}, expected {sha256}")
     os.replace(tmp, dest)  # atomic
+    return digest
 
 
 def _extract(zip_path: Path, out_dir: Path) -> None:
@@ -142,12 +149,26 @@ def _extract(zip_path: Path, out_dir: Path) -> None:
     with zipfile.ZipFile(zip_path) as z:
         for info in z.infolist():
             name = Path(info.filename).name
-            if info.is_dir() or not name or info.filename.startswith("__MACOSX"):
+            if info.is_dir() or not name or name in (".", "..") or info.filename.startswith("__MACOSX"):
                 continue
             tmp = out_dir / (name + ".part")
             with z.open(info) as src, open(tmp, "wb") as dst:
                 shutil.copyfileobj(src, dst)
             os.replace(tmp, out_dir / name)
+
+
+def _verify_members(name: str, w: Weight, out_dir: Path) -> None:
+    """Every pinned member must exist after extraction with the pinned digest (else delete + raise)."""
+    for member, expected in w.members.items():
+        p = out_dir / member
+        if not p.exists():
+            raise RuntimeError(f"[{name}] expected member {member} missing after extraction")
+        if expected is None:
+            continue
+        got = sha256_file(p)
+        if got != expected:
+            p.unlink()
+            raise RuntimeError(f"[{name}] extracted {member} sha256 mismatch: got {got}, expected {expected}")
 
 
 def fetch(name: str) -> None:
@@ -160,11 +181,7 @@ def fetch(name: str) -> None:
         for url in w.urls:
             try:
                 print(f"[{name}] downloading {url}")
-                _download(url, dest)
-                digest = sha256_file(dest)
-                if w.sha256 and digest != w.sha256:
-                    dest.unlink()
-                    raise ValueError(f"sha256 mismatch: got {digest}")
+                digest = _download(url, dest, w.sha256)
                 print(f"[{name}] sha256 {digest}")
                 break
             except Exception as e:  # noqa: BLE001 - try next mirror
@@ -173,7 +190,9 @@ def fetch(name: str) -> None:
         else:
             raise RuntimeError(f"all mirrors failed for {name}:\n" + "\n".join(errors))
     if w.extract_to:
-        _extract(dest, WEIGHTS_DIR / w.extract_to)
+        out_dir = WEIGHTS_DIR / w.extract_to
+        _extract(dest, out_dir)
+        _verify_members(name, w, out_dir)
 
 
 def check(names: list[str]) -> bool:

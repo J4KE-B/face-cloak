@@ -104,3 +104,31 @@ def test_simswap_alignment_picks_frontal_for_frontal_kps():
     M = simswap_estimate_norm(kps, 224)
     mapped = kps @ M[:, :2].T + M[:, 2]
     assert np.allclose(mapped, _SIMSWAP_TEMPLATES_112[2] * 2.0, atol=1e-3)
+
+
+def test_inswapper_hints_select_face_and_report_target_bbox(pair):
+    need("inswapper_128.onnx", "models/buffalo_l/w600k_r50.onnx")
+    from facecloak.swap import InswapperSwap
+
+    sw = InswapperSwap()
+    base = sw.swap(pair[0], pair[1])
+    assert base.target_bbox is not None and base.target_bbox.shape == (4,)
+    hinted = sw.swap(pair[0], pair[1], source_hint=sw.prepare_target(pair[0]).face.bbox, target_hint=base.target_bbox)
+    np.testing.assert_allclose(hinted.target_bbox, base.target_bbox, atol=1e-3)
+    assert np.array_equal(hinted.image, base.image)  # single-face images: hint == default choice
+    far = sw.swap(pair[0], pair[1], source_hint=[5000, 5000, 5100, 5100])
+    assert not far.source_detected and far.image is None  # hint outside the gate: no silent fallback
+
+
+def test_simswap_hints_report_target_bbox(pair):
+    need(
+        "simswap/arcface_checkpoint.tar",
+        "simswap/checkpoints/people/latest_net_G.pth",
+        "simswap_repo/models/fs_networks.py",
+    )
+    from facecloak.swap import SimSwapSwap
+
+    sw = SimSwapSwap()
+    base = sw.swap(pair[0], pair[1])
+    hinted = sw.swap(pair[0], pair[1], target_hint=base.target_bbox)
+    np.testing.assert_allclose(hinted.target_bbox, base.target_bbox, atol=1e-3)

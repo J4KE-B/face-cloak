@@ -49,10 +49,12 @@ def main() -> None:
         "configs": R.configs,
         "whitebox_judges": sorted(R.whitebox()),
         "tau": {c: m["runs"][-1].get("tau") for c, m in R.metas.items() if m.get("runs")},
+        "tau_used": R.tau_used,
+        "tau_source": R.tau_source,
         "tables": {k: _clean(json.loads(v.to_json(orient="records"))) for k, v in T.items()},
         "figures": [f.name for f in figs],
         "n_swap_rows": len(R.swap),
-        "note": "PSR = share of valid swaps with id-sim below tau; CI = 95% bootstrap; null = not available",
+        "note": "PSR = share of valid swaps with id-sim below tau; CI = 95% cluster bootstrap over source ids (Wilson if degenerate); inswapper = white-box encoder, SimSwap = black-box; null = not available",
     }
     (web / "summary.json").write_text(json.dumps(summary, indent=1))
     print(f"wrote {web / 'summary.json'} ({len(T)} tables, {len(figs)} figures)")

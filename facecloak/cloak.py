@@ -47,6 +47,10 @@ class CloakConfig:
     seed: int = 0
 
     def __post_init__(self) -> None:
+        # The delivered image is uint8, so the achievable L-inf budget is integral: a fractional eps
+        # would silently be rounded by quantisation and the "linf <= eps" claim would be loose.
+        if float(self.eps) != float(round(self.eps)) or self.eps < 0:
+            raise ValueError(f"eps must be a non-negative integer (uint8 /255 units), got {self.eps!r}")
         if self.alpha is None:
             self.alpha = self.eps / 10.0
         if self.mode not in ("untargeted", "targeted", "both"):
@@ -166,7 +170,21 @@ def _face_mask(shape: tuple[int, int], bbox: np.ndarray, pad: float = 0.3) -> to
 # ----------------------------------------------------------------------------- Cloaker
 
 
+#: Number of fixed EOT transform samples used to score candidate iterates (see :meth:`Cloaker.cloak`).
+EOT_SCORE_SAMPLES = 8
+
+
 class Cloaker:
+    """Projected-gradient (L-inf, sign-step) identity-feature attack.
+
+    EOT is *stochastic with one transform sample per PGD step* (not the average over several samples).
+    Because the step gradients are noisy, the returned iterate is chosen by a separate, deterministic
+    score: every 10 steps the candidate is scored by its mean loss over ``EOT_SCORE_SAMPLES`` (8)
+    transform samples drawn from a fixed seeded RNG stream, the SAME 8 samples for every candidate, so
+    candidates are compared on equal footing and on the transformed images the attack is meant to
+    survive (without EOT the clean loss is used).
+    """
+
     def __init__(
         self,
         cfg: CloakConfig,
@@ -192,11 +210,10 @@ class Cloaker:
         self.device = device
         self.eot = {**DEFAULT_EOT, **cfg.eot} if cfg.eot is not None else None
 
-    def _loss(self, x, x0, kps, clean, decoy, eot_rng=None) -> tuple[torch.Tensor, dict[str, float]]:
+    def _loss(self, x, x0, kps, clean, decoy, eot_rng=None) -> torch.Tensor:
         cfg = self.cfg
         xt, k = (x, kps) if eot_rng is None else _eot_apply(x, kps, self.eot, eot_rng)
         total = x.new_zeros(())
-        parts: dict[str, float] = {}
         for name, rec in self.recs.items():
             w = cfg.models[name]
             e = rec.embed_image(xt, k)[0]
@@ -211,7 +228,7 @@ class Cloaker:
             from facecloak.det_torch import det_loss
 
             total = total + cfg.det_weight * det_loss(self.det, x)
-        return total, parts
+        return total
 
     def cloak(
         self,
@@ -245,16 +262,24 @@ class Cloaker:
         delta = (delta * mask)
         delta = (x0 + delta).clamp(0, 1) - x0
 
-        def eval_clean(d: torch.Tensor) -> float:
+        def score(d: torch.Tensor) -> float:
+            """Lower is better. EOT: mean loss over K fixed seeded transform samples; else clean loss."""
+            x = (x0 + d).clamp(0, 1)
             with torch.no_grad():
-                return float(self._loss((x0 + d).clamp(0, 1), x0, kps, clean, decoy)[0])
+                if self.eot is None:
+                    return float(self._loss(x, x0, kps, clean, decoy))
+                vals = [
+                    float(self._loss(x, x0, kps, clean, decoy, np.random.default_rng([cfg.seed, 7919, k])))
+                    for k in range(EOT_SCORE_SAMPLES)
+                ]
+            return float(np.mean(vals))
 
-        best_delta, best_val = delta.clone(), eval_clean(delta)
+        best_delta, best_val = delta.clone(), score(delta)
         history: list[float] = []
         for step in range(cfg.steps):
             delta = delta.detach().requires_grad_(True)
             x = (x0 + delta).clamp(0, 1)
-            loss, _ = self._loss(x, x0, kps, clean, decoy, rng if self.eot is not None else None)
+            loss = self._loss(x, x0, kps, clean, decoy, rng if self.eot is not None else None)
             (grad,) = torch.autograd.grad(loss, delta)
             history.append(float(loss.detach()))
             with torch.no_grad():
@@ -262,13 +287,13 @@ class Cloaker:
                 delta = delta.clamp(-eps, eps) * mask
                 delta = (x0 + delta).clamp(0, 1) - x0
             if (step + 1) % 10 == 0 or step + 1 == cfg.steps:
-                v = eval_clean(delta)
+                v = score(delta)
                 if v < best_val:
                     best_val, best_delta = v, delta.detach().clone()
 
         out = (x0 + best_delta).mul(255).round().clamp(0, 255)[0].permute(1, 2, 0).byte().cpu().numpy()
         linf = int(np.abs(out.astype(np.int16) - img_uint8.astype(np.int16)).max())
-        assert linf <= math.ceil(cfg.eps), f"L-inf {linf} exceeds eps {cfg.eps}"
+        assert linf <= int(cfg.eps), f"L-inf {linf} exceeds eps {cfg.eps}"
         if cfg.roi == "face":
             assert not (np.abs(out.astype(np.int16) - img_uint8) * (1 - mask[0, 0].cpu().numpy())[..., None]).any()
 

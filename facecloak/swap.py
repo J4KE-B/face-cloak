@@ -1,14 +1,25 @@
 """Face-swap attackers used to evaluate cloaked identity photos.
 
 Threat model: we cloak the SOURCE identity photo; the attacker feeds the cloaked photo to a face-swap
-tool as the identity source and pastes that identity onto a target image. Both attackers here are
-black-box with respect to the cloak (no gradients flow through them) and re-run face detection and
-recognition on whatever image they receive, as a real attacker would.
+tool as the identity source and pastes that identity onto a target image. No gradients flow through
+either swapper, and both re-run face detection and recognition on whatever image they receive, as a
+real attacker would.
+
+White-box vs black-box (important for how results are labelled):
 
 * :class:`InswapperSwap`  - insightface ``inswapper_128`` (ONNX) driven by buffalo_l detection and
-  the buffalo_l ArcFace embedding. Runs on CPU or GPU.
+  the buffalo_l ``w600k_r50`` ArcFace embedding. inswapper's source identity IS that embedding, and
+  ``w600k_r50`` is also our attack model, so attacks on ``w600k_r50`` are WHITE-BOX with respect to
+  inswapper's identity encoder (the swapper network itself stays a black box, i.e. grey-box).
+  Label: "inswapper (white-box encoder)". Runs on CPU or GPU.
 * :class:`SimSwapSwap`    - official SimSwap 224 "people" model (PyTorch), which uses its OWN ArcFace
-  network for the identity latent, so it is a genuine transfer attacker.
+  network for the identity latent, so it is the BLACK-BOX transfer test. Label: "SimSwap (black-box)".
+
+Face selection: by default the largest face is used (inswapper) or the highest-scoring face with
+``det_score >= 0.6`` (SimSwap, upstream behaviour). The experiment runner instead passes
+``source_hint`` / ``target_hint`` (a bbox ``(4,)`` or 5-point kps ``(5, 2)`` from the manifest) so that the
+swapper operates on exactly the face the manifest / evaluator uses; the detected face nearest the hint
+centre is chosen (see :func:`pick_face`).
 
 All public APIs take RGB uint8 HxWx3 numpy images and return RGB uint8 (insightface/cv2 want BGR,
 conversion happens internally).
@@ -17,9 +28,14 @@ SECURITY (SimSwap): ``arcface_checkpoint.tar`` is a fully pickled ``nn.Module`` 
 so ``torch.load(weights_only=True)`` cannot read it and plain ``weights_only=False`` would allow
 arbitrary code execution from a tampered file. We therefore (1) refuse to load unless its SHA-256
 matches the pin in :mod:`facecloak.weights`, and (2) unpickle through an allow-list unpickler
-(:class:`_RestrictedUnpickler`) that only resolves the exact classes found in that file
-(``models.arcface_models.{ResNet,IRBlock,SEBlock}``, ``torch.nn`` layers, tensor rebuild helpers).
-The generator checkpoint is a plain state_dict, loaded with ``weights_only=True`` (also SHA-pinned).
+(:class:`_RestrictedUnpickler`) that resolves ONLY the exact ``(module, name)`` pairs in
+``_ALLOWED_GLOBALS`` (19 pairs, enumerated by static ``pickletools`` disassembly of that file:
+``models.arcface_models.{ResNet,IRBlock,SEBlock}``, 11 ``torch.nn.modules.*`` layer classes, tensor
+rebuild helpers). Names containing ``.`` are rejected (pickle protocol >= 4 would otherwise walk
+attributes, e.g. ``torch.nn.modules.module`` + ``torch.os.system``). The SHA-256 pin is the primary
+defence; the allow-list is defence in depth, not a sandbox. The generator checkpoint is a plain
+state_dict, loaded with ``weights_only=True`` (also SHA-pinned). The cloned SimSwap repo is verified
+to be at ``SIMSWAP_COMMIT`` before any of its code is imported.
 """
 
 from __future__ import annotations
@@ -65,12 +81,15 @@ class SwapResult:
         source_embedding: The attacker's identity embedding of the source, L2-normalised float32
             (buffalo_l ArcFace for inswapper, SimSwap's own ArcFace latent for SimSwap); None if
             the face was not detected.
+        target_bbox: ``(4,)`` float32 bbox of the target face that was swapped (as detected by the
+            attacker's detector); None if no swap happened. Optional so older callers keep working.
     """
 
     image: np.ndarray | None
     source_detected: bool
     source_det_score: float
     source_embedding: np.ndarray | None
+    target_bbox: np.ndarray | None = None
 
 
 # ----------------------------------------------------------------------------- shared helpers
@@ -102,17 +121,20 @@ def _capped_session(path: Path | str, providers: list[str]):
     return ort.InferenceSession(str(path), so, providers=providers)
 
 
-def _faces(app, bgr: np.ndarray) -> list:
+def faces_in(app, bgr: np.ndarray) -> list:
     """Detect faces at the app's det_size; if none, retry at 320x320.
 
     LFW images are 250x250. SCRFD at 640x640 upsamples them 2.56x, which can push the face outside the
     anchor scale range and fail on some (esp. cloaked) images; 320x320 matches their native scale.
-    The attacker would equally retry with a different det_size, so we model that.
+    The attacker would equally retry with a different det_size, so we model that. Shared by the
+    swappers, the experiment's detector and the swapped-face locator so they all see the same faces.
     """
     faces = app.get(bgr)
     if faces:
         return faces
-    det = app.det_model
+    det = getattr(app, "det_model", None)
+    if det is None:  # fakes / apps without a detector handle: nothing to retry with
+        return faces
     old = det.input_size
     try:
         det.input_size = _FALLBACK_DET_SIZE
@@ -121,12 +143,59 @@ def _faces(app, bgr: np.ndarray) -> list:
         det.input_size = old
 
 
-def _largest(faces: list):
+def largest_face(faces: list):
     return max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
 
 
-def _image_key(img: np.ndarray) -> str:
-    return hashlib.blake2b(img.tobytes(), digest_size=16, salt=str(img.shape).encode()[:16]).hexdigest()
+_faces = faces_in  # private aliases kept for older imports
+_largest = largest_face
+
+#: A hinted face must lie within this fraction of its own larger side from the hint centre.
+HINT_MAX_DIST_FRAC = 0.5
+
+
+def _hint_center(hint: Any) -> np.ndarray:
+    """Centre of a bbox ``(4,)`` (x1,y1,x2,y2) or 5-point kps ``(5, 2)`` hint."""
+    h = np.asarray(hint, dtype=np.float64)
+    if h.shape == (4,):
+        return np.array([(h[0] + h[2]) / 2, (h[1] + h[3]) / 2])
+    if h.shape == (5, 2):
+        return h.mean(0)
+    raise ValueError(f"hint must be a bbox (4,) or kps (5, 2), got shape {h.shape}")
+
+
+def pick_face(faces: list, hint: Any = None, *, min_score: float | None = None):
+    """Choose one face.
+
+    With ``hint``: the face whose bbox centre is nearest the hint centre, provided the distance is at
+    most ``HINT_MAX_DIST_FRAC`` of that face's larger side; otherwise None (the hinted face is gone, we do
+    NOT silently fall back to a different face). Without ``hint``: ``min_score`` None -> largest face
+    (inswapper behaviour); a float -> highest ``det_score`` among faces with ``det_score >= min_score``
+    (SimSwap upstream behaviour). Returns None when ``faces`` is empty / nothing qualifies.
+    """
+    if not faces:
+        return None
+    if hint is not None:
+        c = _hint_center(hint)
+
+        def dist(f) -> float:
+            b = np.asarray(f.bbox, dtype=np.float64)
+            return float(np.linalg.norm(np.array([(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]) - c))
+
+        best = min(faces, key=dist)
+        b = np.asarray(best.bbox, dtype=np.float64)
+        return best if dist(best) <= HINT_MAX_DIST_FRAC * max(b[2] - b[0], b[3] - b[1]) else None
+    if min_score is None:
+        return largest_face(faces)
+    ok = [f for f in faces if float(f.det_score) >= min_score]
+    return max(ok, key=lambda f: float(f.det_score)) if ok else None
+
+
+def _image_key(img: np.ndarray, hint: Any = None) -> str:
+    h = hashlib.blake2b(img.tobytes(), digest_size=16, salt=str(img.shape).encode()[:16])
+    if hint is not None:
+        h.update(np.asarray(hint, dtype=np.float64).tobytes())
+    return h.hexdigest()
 
 
 # ----------------------------------------------------------------------------- inswapper
@@ -175,35 +244,50 @@ class InswapperSwap:
         self.swapper = INSwapper(model_file=str(INSWAPPER_PATH), session=_capped_session(INSWAPPER_PATH, self.providers))
         self._cache: OrderedDict[str, PreparedTarget] = OrderedDict()
 
-    def prepare_target(self, target_rgb: np.ndarray) -> PreparedTarget:
-        """Detect the largest face in the target once and cache it (LRU of 8)."""
-        key = _image_key(target_rgb)
+    def prepare_target(self, target_rgb: np.ndarray, target_hint: Any = None) -> PreparedTarget:
+        """Detect the target face once and cache it (LRU of 8).
+
+        The face is the largest one, or with ``target_hint`` (bbox / kps) the one nearest the hint.
+        """
+        key = _image_key(target_rgb, target_hint)
         if key in self._cache:
             self._cache.move_to_end(key)
             return self._cache[key]
         bgr = _bgr(target_rgb)
-        faces = _faces(self.app, bgr)
-        if not faces:
-            raise NoFaceError("no face detected in target image")
-        prepared = PreparedTarget(bgr=bgr, face=_largest(faces))
+        face = pick_face(faces_in(self.app, bgr), target_hint)
+        if face is None:
+            raise NoFaceError("no face detected in target image" + (" near the hint" if target_hint is not None else ""))
+        prepared = PreparedTarget(bgr=bgr, face=face)
         self._cache[key] = prepared
         if len(self._cache) > 8:
             self._cache.popitem(last=False)
         return prepared
 
-    def swap(self, source_rgb: np.ndarray, target: np.ndarray | PreparedTarget) -> SwapResult:
-        """Paste the identity of ``source_rgb`` onto the largest face of ``target``."""
-        prepared = target if isinstance(target, PreparedTarget) else self.prepare_target(target)
-        faces = _faces(self.app, _bgr(source_rgb))
-        if not faces:
+    def swap(
+        self,
+        source_rgb: np.ndarray,
+        target: np.ndarray | PreparedTarget,
+        source_hint: Any = None,
+        target_hint: Any = None,
+    ) -> SwapResult:
+        """Paste the identity of ``source_rgb`` onto a face of ``target``.
+
+        Without hints the largest face is used on both sides (server behaviour). ``source_hint`` /
+        ``target_hint`` (bbox or kps) select the face nearest that location instead; if no source face
+        lies near ``source_hint`` the source counts as not detected. ``target_hint`` is ignored when
+        ``target`` is already a :class:`PreparedTarget`.
+        """
+        prepared = target if isinstance(target, PreparedTarget) else self.prepare_target(target, target_hint)
+        src = pick_face(faces_in(self.app, _bgr(source_rgb)), source_hint)
+        if src is None:
             return SwapResult(None, False, 0.0, None)
-        src = _largest(faces)
         out_bgr = self.swapper.get(prepared.bgr, prepared.face, src, paste_back=True)
         return SwapResult(
             image=np.ascontiguousarray(out_bgr[:, :, ::-1]),
             source_detected=True,
             source_det_score=float(src.det_score),
             source_embedding=np.asarray(src.normed_embedding, dtype=np.float32),
+            target_bbox=np.asarray(prepared.face.bbox, dtype=np.float32)[:4].copy(),
         )
 
 
@@ -223,6 +307,7 @@ _SIMSWAP_TEMPLATES_112 = np.array(
     dtype=np.float32,
 )
 _SIMSWAP_CROP = 224
+_SIMSWAP_DET_THRESH = 0.6  # upstream SimSwap insightface_func det_thresh
 
 
 def simswap_estimate_norm(kps: np.ndarray, size: int = _SIMSWAP_CROP) -> np.ndarray:
@@ -246,30 +331,47 @@ def simswap_estimate_norm(kps: np.ndarray, size: int = _SIMSWAP_CROP) -> np.ndar
     return best
 
 
-#: (module, name) pairs the allow-list unpickler may resolve while reading arcface_checkpoint.tar.
-#: Derived by statically disassembling the file (pickletools, no execution).
-_ALLOWED_GLOBALS = {
-    ("models.arcface_models", "ResNet"),
-    ("models.arcface_models", "IRBlock"),
-    ("models.arcface_models", "SEBlock"),
-    ("collections", "OrderedDict"),
-    ("__builtin__", "set"),
-    ("builtins", "set"),
-    ("torch", "FloatStorage"),
-    ("torch", "LongStorage"),
-    ("torch._utils", "_rebuild_tensor_v2"),
-    ("torch._utils", "_rebuild_parameter"),
-}
-_ALLOWED_NN_PREFIX = "torch.nn.modules."
+#: EXACT (module, name) pairs the allow-list unpickler may resolve while reading arcface_checkpoint.tar.
+#: Enumerated by static ``pickletools.genops`` disassembly of ``archive/data.pkl`` inside that file
+#: (19 GLOBAL opcodes, nothing executed). Add a pair only after re-disassembling a new checkpoint.
+_ALLOWED_GLOBALS = frozenset(
+    {
+        ("models.arcface_models", "ResNet"),
+        ("models.arcface_models", "IRBlock"),
+        ("models.arcface_models", "SEBlock"),
+        ("collections", "OrderedDict"),
+        ("__builtin__", "set"),
+        ("builtins", "set"),
+        ("torch", "FloatStorage"),
+        ("torch", "LongStorage"),
+        ("torch._utils", "_rebuild_tensor_v2"),
+        ("torch._utils", "_rebuild_parameter"),
+        ("torch.nn.modules.activation", "PReLU"),
+        ("torch.nn.modules.activation", "Sigmoid"),
+        ("torch.nn.modules.batchnorm", "BatchNorm1d"),
+        ("torch.nn.modules.batchnorm", "BatchNorm2d"),
+        ("torch.nn.modules.container", "Sequential"),
+        ("torch.nn.modules.conv", "Conv2d"),
+        ("torch.nn.modules.dropout", "Dropout"),
+        ("torch.nn.modules.linear", "Linear"),
+        ("torch.nn.modules.pooling", "AdaptiveAvgPool2d"),
+        ("torch.nn.modules.pooling", "MaxPool2d"),
+    }
+)
 
 
 class _RestrictedUnpickler(pickle.Unpickler):
-    """Unpickler resolving only globals on the allow-list (blocks ``os.system`` & friends)."""
+    """Unpickler resolving only exact allow-listed ``(module, name)`` pairs.
+
+    Dotted ``name`` values are always rejected: for pickle protocol >= 4, ``find_class`` resolves
+    ``name`` by walking attributes, so ``('torch.nn.modules.module', 'torch.os.system')`` would reach
+    ``os.system`` through a module that merely imports ``torch``.
+    """
 
     def find_class(self, module: str, name: str):
-        if (module, name) in _ALLOWED_GLOBALS or module.startswith(_ALLOWED_NN_PREFIX):
-            return super().find_class(module, name)
-        raise pickle.UnpicklingError(f"blocked global {module}.{name} in checkpoint")
+        if "." in name or (module, name) not in _ALLOWED_GLOBALS:
+            raise pickle.UnpicklingError(f"blocked global {module}.{name} in checkpoint")
+        return super().find_class(module, name)
 
 
 def _restricted_pickle_module() -> types.ModuleType:
@@ -293,10 +395,28 @@ def _require_sha(path: Path, expected: str | None, what: str) -> None:
         raise RuntimeError(f"sha256 mismatch for {path}: got {got}, pinned {expected}")
 
 
+def _verify_simswap_commit(repo: Path) -> None:
+    """The cloned repo's code is imported and executed: it must be at the pinned commit."""
+    import subprocess
+
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], check=True, capture_output=True, text=True, timeout=20
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(f"cannot verify SimSwap repo commit at {repo}: {e}") from e
+    if head != SIMSWAP_COMMIT:
+        raise RuntimeError(
+            f"SimSwap repo {repo} is at {head}, expected pinned {SIMSWAP_COMMIT}; "
+            f"run `git -C {repo} checkout {SIMSWAP_COMMIT}`"
+        )
+
+
 def _import_simswap(repo: Path):
     """Import ``models.fs_networks`` / ``models.arcface_models`` from the cloned repo (read-only)."""
     if not (repo / "models" / "fs_networks.py").exists():
         raise FileNotFoundError(f"SimSwap repo missing at {repo}; git clone https://github.com/neuralchen/SimSwap there")
+    _verify_simswap_commit(repo)
     existing = sys.modules.get("models")
     if existing is not None and Path(getattr(existing, "__file__", "") or "").parent != repo / "models":
         raise RuntimeError("a different top-level 'models' package is already imported; cannot load SimSwap")
@@ -403,17 +523,28 @@ class SimSwapSwap:
         out = mask * (fake * 255.0) + (1 - mask) * target_bgr.astype(np.float32)
         return np.clip(np.rint(out), 0, 255).astype(np.uint8)
 
-    def swap(self, source_rgb: np.ndarray, target_rgb: np.ndarray) -> SwapResult:
-        """Paste the identity of ``source_rgb`` onto the largest face of ``target_rgb``."""
+    def swap(
+        self,
+        source_rgb: np.ndarray,
+        target_rgb: np.ndarray,
+        source_hint: Any = None,
+        target_hint: Any = None,
+    ) -> SwapResult:
+        """Paste the identity of ``source_rgb`` onto a face of ``target_rgb``.
+
+        Face choice: with a hint (bbox / kps) the face nearest the hint centre (distance-gated, see
+        :func:`pick_face`); without one the highest-``det_score`` face among those with
+        ``det_score >= 0.6`` - upstream SimSwap uses ``det_thresh=0.6`` and ``argmax(det_score)`` (its
+        own detector is not shipped, buffalo_l SCRFD stands in for it).
+        """
         torch = self.torch
-        src_faces = _faces(self.app, _bgr(source_rgb))
-        if not src_faces:
+        src = pick_face(faces_in(self.app, _bgr(source_rgb)), source_hint, min_score=_SIMSWAP_DET_THRESH)
+        if src is None:
             return SwapResult(None, False, 0.0, None)
         tgt_bgr = _bgr(target_rgb)
-        tgt_faces = _faces(self.app, tgt_bgr)
-        if not tgt_faces:
+        tgt = pick_face(faces_in(self.app, tgt_bgr), target_hint, min_score=_SIMSWAP_DET_THRESH)
+        if tgt is None:
             raise NoFaceError("no face detected in target image")
-        src, tgt = _largest(src_faces), _largest(tgt_faces)
         src_crop, _ = self._crop(_bgr(source_rgb), np.asarray(src.kps))
         tgt_crop, M = self._crop(tgt_bgr, np.asarray(tgt.kps))
         with torch.no_grad():
@@ -433,6 +564,7 @@ class SimSwapSwap:
             source_detected=True,
             source_det_score=float(src.det_score),
             source_embedding=latent[0].cpu().numpy().astype(np.float32),
+            target_bbox=np.asarray(tgt.bbox, dtype=np.float32)[:4].copy(),
         )
 
 

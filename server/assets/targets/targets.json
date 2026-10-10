@@ -1,0 +1,8 @@
+[
+  {"id": "duke", "name": "Charles Duke (NASA)", "file": "duke.jpg", "source": "https://commons.wikimedia.org/wiki/File:Official_NASA_portrait_Charles_Moss_Duke_Jr.jpg", "license": "Public domain (US federal government / NASA, PD-USGov-NASA)"},
+  {"id": "godwin", "name": "Linda Godwin (NASA)", "file": "godwin.jpg", "source": "https://commons.wikimedia.org/wiki/File:Official_portrait_of_astronaut_Linda_M._Godwin.jpg", "license": "Public domain (US federal government / NASA, PD-USGov-NASA)"},
+  {"id": "jemison", "name": "Mae Jemison (NASA)", "file": "jemison.jpg", "source": "https://commons.wikimedia.org/wiki/File:Mae_Jemison_-_Official_portrait_of_1987_astronaut_candidate.jpg", "license": "Public domain (US federal government / NASA, PD-USGov-NASA)"},
+  {"id": "kim", "name": "Jonny Kim (NASA)", "file": "kim.jpg", "source": "https://commons.wikimedia.org/wiki/File:Jonny_Kim_official_portrait.jpg", "license": "Public domain (US federal government / NASA, PD-USGov-NASA)"},
+  {"id": "moghbeli", "name": "Jasmin Moghbeli (NASA)", "file": "moghbeli.jpg", "source": "https://commons.wikimedia.org/wiki/File:Jasmin_Moghbeli_official_portrait.jpg", "license": "Public domain (US federal government / NASA, PD-USGov-NASA)"},
+  {"id": "rubio", "name": "Frank Rubio (NASA)", "file": "rubio.jpg", "source": "https://commons.wikimedia.org/wiki/File:Frank_Rubio_official_portrait.jpg", "license": "Public domain (US federal government / NASA, PD-USGov-NASA)"}
+]

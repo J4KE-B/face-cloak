@@ -18,8 +18,9 @@ def main() -> None:
     ap.add_argument("--in", dest="inp", default=str(RESULTS_DIR / "raw"))
     ap.add_argument("--out", default=str(RESULTS_DIR / "figs"))
     ap.add_argument("--tables", default=str(RESULTS_DIR / "tables"))
+    ap.add_argument("--calibration", default=None, help="calibration.json used if run metas disagree on tau")
     a = ap.parse_args()
-    make_all(Path(a.inp), Path(a.out), Path(a.tables))
+    make_all(Path(a.inp), Path(a.out), Path(a.tables), Path(a.calibration) if a.calibration else None)
 
 
 if __name__ == "__main__":

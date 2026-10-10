@@ -1,4 +1,5 @@
 # Full experiment: 150 sources x 3 targets, 8 attacks, 10 transforms, 2 swappers, 3 judges.
+# inswapper = white-box on its identity encoder (buffalo_l w600k_r50 is also our attack model); simswap = black-box transfer.
 name: main
 manifest: data/manifest.json
 n_targets_per_src: 3
@@ -9,28 +10,32 @@ transforms: [none, jpeg90, jpeg75, jpeg50, resize0.75, resize0.5, blur1, blur2, 
 judges: [glintr100, w600k_mbf, w600k_r50]
 whitebox_judges: [w600k_r50]
 attacks:
-  clean: {}
-  noise: {eps: 8}
-  pgd_r50: {eps: 8, steps: 100, models: {w600k_r50: 1.0}}
-  pgd_ens: {eps: 8, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  clean: {kind: clean}
+  noise: {kind: noise, eps: 8}
+  pgd_r50: {kind: pgd, eps: 8, steps: 100, models: {w600k_r50: 1.0}}
+  pgd_ens: {kind: pgd, eps: 8, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
   pgd_ens_targeted:
+    kind: pgd
     eps: 8
     steps: 100
     models: {w600k_r50: 1.0, facenet_vggface2: 1.0}
     mode: both
     targeted_weight: 1.0
   pgd_ens_eot:
+    kind: pgd
     eps: 8
     steps: 100
     models: {w600k_r50: 1.0, facenet_vggface2: 1.0}
     eot: {}            # empty dict = DEFAULT_EOT
   pgd_ens_eot_lpips:
+    kind: pgd
     eps: 8
     steps: 100
     models: {w600k_r50: 1.0, facenet_vggface2: 1.0}
     eot: {}
     lpips_weight: 1.0
   pgd_ens_det:
+    kind: pgd
     eps: 8
     steps: 100
     models: {w600k_r50: 1.0, facenet_vggface2: 1.0}

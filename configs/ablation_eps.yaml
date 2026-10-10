@@ -4,13 +4,13 @@ manifest: data/manifest.json
 n_targets_per_src: 3
 seed: 0
 device: auto
-swappers: [inswapper]
+swappers: [inswapper, simswap]
 transforms: [none, jpeg75]
 judges: [glintr100, w600k_mbf, w600k_r50]
 whitebox_judges: [w600k_r50]
 attacks:
-  pgd_ens_eps2: {eps: 2, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
-  pgd_ens_eps4: {eps: 4, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
-  pgd_ens_eps8: {eps: 8, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
-  pgd_ens_eps12: {eps: 12, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
-  pgd_ens_eps16: {eps: 16, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  pgd_ens_eps2: {kind: pgd, eps: 2, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  pgd_ens_eps4: {kind: pgd, eps: 4, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  pgd_ens_eps8: {kind: pgd, eps: 8, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  pgd_ens_eps12: {kind: pgd, eps: 12, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}
+  pgd_ens_eps16: {kind: pgd, eps: 16, steps: 100, models: {w600k_r50: 1.0, facenet_vggface2: 1.0}}

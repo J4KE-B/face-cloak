@@ -111,3 +111,31 @@ def test_select_decoy():
 def test_config_roundtrip():
     c = CloakConfig(name="x", eps=4, models={"a": 0.5}, eot={"p_jpeg": 0.1})
     assert CloakConfig.from_dict(c.to_dict()) == c and c.alpha == 0.4
+
+
+def test_eps_must_be_integer():
+    CloakConfig(eps=8)
+    CloakConfig(eps=8.0)
+    with pytest.raises(ValueError, match="integer"):
+        CloakConfig(eps=2.5)
+    with pytest.raises(ValueError, match="integer"):
+        CloakConfig.from_dict({"eps": 0.5})
+
+
+def test_eot_best_iterate_scored_on_fixed_samples(img, monkeypatch):
+    """Candidate scoring replays the SAME K seeded transform samples for every candidate."""
+    import facecloak.cloak as cl
+
+    states_score, orig = [], cl._eot_apply
+
+    def spy(x, kps, p, rng):
+        if not torch.is_grad_enabled():  # scoring passes run under no_grad; the PGD step does not
+            states_score.append(repr(rng.bit_generator.state["state"]))
+        return orig(x, kps, p, rng)
+
+    monkeypatch.setattr(cl, "_eot_apply", spy)
+    r = make(eps=8, steps=20, eot={"p_resize": 1, "p_blur": 1, "p_jpeg": 0}).cloak(img, KPS)
+    # 1 initial + every 10 steps (2) = 3 candidates x K samples, with exactly K distinct sample streams
+    assert len(states_score) == 3 * cl.EOT_SCORE_SAMPLES
+    assert len(set(states_score)) == cl.EOT_SCORE_SAMPLES == 8
+    assert r.delta_linf_255 <= 8

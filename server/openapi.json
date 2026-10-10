@@ -1,0 +1,728 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "face-cloak demo backend",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/targets": {
+      "get": {
+        "summary": "Targets",
+        "operationId": "targets_api_targets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Target"
+                  },
+                  "type": "array",
+                  "title": "Response Targets Api Targets Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "post": {
+        "summary": "Create Job",
+        "operationId": "create_job_api_jobs_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_job_api_jobs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobCreated"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "summary": "Get Job",
+        "operationId": "get_job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Job",
+        "operationId": "delete_job_api_jobs__job_id__delete",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_create_job_api_jobs_post": {
+        "properties": {
+          "photo": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Photo",
+            "description": "Photo to protect (JPEG/PNG/WebP, <=5 MB)"
+          },
+          "target_id": {
+            "type": "string",
+            "title": "Target Id"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "contentMediaType": "application/octet-stream"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference",
+            "description": "Optional second photo of the same person"
+          },
+          "eps": {
+            "type": "integer",
+            "maximum": 16.0,
+            "minimum": 2.0,
+            "title": "Eps",
+            "default": 8
+          },
+          "steps": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 200.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Steps"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "robust"
+            ],
+            "title": "Mode",
+            "default": "fast"
+          }
+        },
+        "type": "object",
+        "required": [
+          "photo",
+          "target_id"
+        ],
+        "title": "Body_create_job_api_jobs_post"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "loading"
+            ],
+            "title": "Status"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "device": {
+            "type": "string",
+            "title": "Device",
+            "description": "'cuda' or 'cpu'"
+          },
+          "models_loaded": {
+            "type": "boolean",
+            "title": "Models Loaded"
+          },
+          "queue_length": {
+            "type": "integer",
+            "title": "Queue Length",
+            "description": "jobs queued + running"
+          },
+          "default_steps": {
+            "type": "integer",
+            "title": "Default Steps"
+          },
+          "max_eps": {
+            "type": "integer",
+            "title": "Max Eps"
+          },
+          "tau": {
+            "type": "number",
+            "title": "Tau",
+            "description": "glintr100 identity threshold at FAR=1%"
+          },
+          "max_steps": {
+            "type": "integer",
+            "title": "Max Steps",
+            "description": "largest accepted PGD step count on this server's device"
+          },
+          "consent_notice": {
+            "type": "string",
+            "title": "Consent Notice",
+            "description": "text the frontend must show next to the upload control"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "version",
+          "device",
+          "models_loaded",
+          "queue_length",
+          "default_steps",
+          "max_eps",
+          "tau",
+          "max_steps",
+          "consent_notice"
+        ],
+        "title": "Health"
+      },
+      "JobCreated": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "queue_position": {
+            "type": "integer",
+            "title": "Queue Position",
+            "description": "0 = running now / next, 1 = one job ahead, ..."
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "queue_position"
+        ],
+        "title": "JobCreated"
+      },
+      "JobResult": {
+        "properties": {
+          "original": {
+            "type": "string",
+            "title": "Original",
+            "description": "PNG data URL, long side <= 1024"
+          },
+          "cloaked": {
+            "type": "string",
+            "title": "Cloaked",
+            "description": "PNG data URL, long side <= 1024"
+          },
+          "perturbation": {
+            "type": "string",
+            "title": "Perturbation",
+            "description": "PNG data URL: |cloaked-original| x10, clipped to [0,255]"
+          },
+          "swap_original": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Swap Original",
+            "description": "PNG data URL (long side <= 512, labelled SYNTHETIC): attacker's swap using the original photo"
+          },
+          "swap_cloaked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Swap Cloaked",
+            "description": "PNG data URL (long side <= 512, labelled SYNTHETIC); null if the attacker failed to detect the face"
+          },
+          "cloaked_download": {
+            "type": "string",
+            "title": "Cloaked Download",
+            "description": "full-resolution (as processed, <=1024 px) cloaked PNG data URL"
+          },
+          "scores": {
+            "$ref": "#/components/schemas/Scores"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/Quality"
+          },
+          "protected": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protected",
+            "description": "id_sim_cloaked < tau and id_sim_original >= tau; null if the clean swap itself did not match"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "human-readable explanation of the verdict"
+          },
+          "timings": {
+            "$ref": "#/components/schemas/Timings"
+          },
+          "params": {
+            "$ref": "#/components/schemas/Params"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original",
+          "cloaked",
+          "perturbation",
+          "swap_original",
+          "swap_cloaked",
+          "cloaked_download",
+          "scores",
+          "quality",
+          "protected",
+          "timings",
+          "params"
+        ],
+        "title": "JobResult"
+      },
+      "JobStatus": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "error",
+              "expired"
+            ],
+            "title": "Status"
+          },
+          "queue_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Position"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Progress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status"
+        ],
+        "title": "JobStatus"
+      },
+      "Params": {
+        "properties": {
+          "eps": {
+            "type": "integer",
+            "title": "Eps"
+          },
+          "steps": {
+            "type": "integer",
+            "title": "Steps"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "fast",
+              "robust"
+            ],
+            "title": "Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "eps",
+          "steps",
+          "mode"
+        ],
+        "title": "Params"
+      },
+      "Progress": {
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": [
+              "detecting",
+              "cloaking",
+              "swapping",
+              "judging"
+            ],
+            "title": "Stage"
+          },
+          "step": {
+            "type": "integer",
+            "title": "Step",
+            "description": "PGD step (estimated from elapsed time while cloaking), else 0"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "total PGD steps"
+          }
+        },
+        "type": "object",
+        "required": [
+          "stage",
+          "step",
+          "total"
+        ],
+        "title": "Progress"
+      },
+      "Quality": {
+        "properties": {
+          "psnr": {
+            "type": "number",
+            "title": "Psnr"
+          },
+          "ssim": {
+            "type": "number",
+            "title": "Ssim"
+          },
+          "lpips": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lpips"
+          },
+          "linf_255": {
+            "type": "integer",
+            "title": "Linf 255"
+          }
+        },
+        "type": "object",
+        "required": [
+          "psnr",
+          "ssim",
+          "lpips",
+          "linf_255"
+        ],
+        "title": "Quality"
+      },
+      "Scores": {
+        "properties": {
+          "id_sim_original": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id Sim Original",
+            "description": "cosine(judge(swap of original), reference)"
+          },
+          "id_sim_cloaked": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id Sim Cloaked",
+            "description": "null if the attacker could not even detect the cloaked face"
+          },
+          "tau": {
+            "type": "number",
+            "title": "Tau"
+          },
+          "judge": {
+            "type": "string",
+            "const": "glintr100",
+            "title": "Judge",
+            "default": "glintr100"
+          },
+          "reference": {
+            "type": "string",
+            "enum": [
+              "uploaded",
+              "self"
+            ],
+            "title": "Reference",
+            "description": "'uploaded' = separate reference photo, 'self' = original upload"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id_sim_original",
+          "id_sim_cloaked",
+          "tau",
+          "reference"
+        ],
+        "title": "Scores"
+      },
+      "Target": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "thumbnail": {
+            "type": "string",
+            "title": "Thumbnail",
+            "description": "data:image/jpeg;base64,... (<=256 px)"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "URL of the original image"
+          },
+          "license": {
+            "type": "string",
+            "title": "License"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "thumbnail",
+          "source",
+          "license"
+        ],
+        "title": "Target"
+      },
+      "Timings": {
+        "properties": {
+          "cloak_s": {
+            "type": "number",
+            "title": "Cloak S"
+          },
+          "total_s": {
+            "type": "number",
+            "title": "Total S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cloak_s",
+          "total_s"
+        ],
+        "title": "Timings"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

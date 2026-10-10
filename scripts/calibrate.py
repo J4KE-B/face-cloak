@@ -28,6 +28,7 @@ from facecloak.data import (
     make_detector,
     manifest_identities,
 )
+from facecloak.metrics import calibrate_far, eer, kfold_accuracy, tar_at
 from facecloak.paths import CACHE_DIR, RESULTS_DIR, WEIGHTS_DIR
 
 MODELS: dict[str, Path] = {
@@ -35,53 +36,6 @@ MODELS: dict[str, Path] = {
     "w600k_mbf": WEIGHTS_DIR / "models/buffalo_s/w600k_mbf.onnx",
     "w600k_r50": WEIGHTS_DIR / "models/buffalo_l/w600k_r50.onnx",  # whitebox model
 }
-
-# ------------------------------------------------------------------ metrics (self-contained)
-
-
-def calibrate_far(genuine: np.ndarray, impostor: np.ndarray, far: float) -> float:
-    """Smallest threshold tau (accept iff sim >= tau) with impostor FAR <= ``far``."""
-    imp = np.sort(np.asarray(impostor))[::-1]
-    k = int(np.floor(far * len(imp)))  # number of impostors allowed above tau
-    if k >= len(imp):
-        return float(imp[-1])
-    if k == 0:
-        return float(np.nextafter(imp[0], np.inf))
-    return float((imp[k - 1] + imp[k]) / 2.0)
-
-
-def tar_at(genuine: np.ndarray, tau: float) -> float:
-    return float(np.mean(np.asarray(genuine) >= tau))
-
-
-def eer(genuine: np.ndarray, impostor: np.ndarray) -> tuple[float, float]:
-    """Equal error rate and its threshold."""
-    g, i = np.sort(genuine), np.sort(impostor)
-    taus = np.unique(np.concatenate([g, i]))
-    frr = np.searchsorted(g, taus, side="left") / len(g)  # genuine rejected (sim < tau)
-    far = 1.0 - np.searchsorted(i, taus, side="left") / len(i)  # impostor accepted
-    idx = int(np.argmin(np.abs(far - frr)))
-    return float((far[idx] + frr[idx]) / 2.0), float(taus[idx])
-
-
-def best_threshold(scores: np.ndarray, labels: np.ndarray) -> float:
-    """Threshold maximising accuracy (accept iff score >= tau)."""
-    order = np.argsort(scores)
-    s, y = scores[order], labels[order].astype(bool)
-    # tau = s[k]: negatives below k correct, positives from k correct
-    neg_below = np.concatenate([[0], np.cumsum(~y)])[:-1]
-    pos_from = y.sum() - np.concatenate([[0], np.cumsum(y)])[:-1]
-    return float(s[int(np.argmax(neg_below + pos_from))])
-
-
-def kfold_accuracy(scores: np.ndarray, labels: np.ndarray, folds: np.ndarray) -> tuple[float, float]:
-    accs = []
-    for f in np.unique(folds):
-        te = folds == f
-        tau = best_threshold(scores[~te], labels[~te])
-        accs.append(np.mean((scores[te] >= tau) == labels[te].astype(bool)))
-    return float(np.mean(accs)), float(np.std(accs))
-
 
 # ------------------------------------------------------------------ pairs
 
@@ -101,8 +55,11 @@ def parse_pairs(pairs_file: Path) -> list[dict]:
     return out
 
 
-def rel(img: tuple[str, int]) -> str:
-    return f"lfw/{img[0]}/{img[0]}_{img[1]:04d}.jpg"
+def rel(img: tuple[str, int], prefix: str = "lfw") -> str:
+    """Image path relative to the LFW root; ``prefix`` is ``images_dir(root)`` relative to root
+    (``"lfw"`` for the standard layout, ``""`` when the identity folders sit directly in the root)."""
+    p = f"{img[0]}/{img[0]}_{img[1]:04d}.jpg"
+    return f"{prefix}/{p}" if prefix else p
 
 
 # ------------------------------------------------------------------ workers
@@ -150,8 +107,18 @@ def main() -> None:
     ap.add_argument("--lfw-root", type=Path, default=None)
     ap.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     ap.add_argument("--no-exclude-manifest", action="store_true")
-    ap.add_argument("--out", type=Path, default=RESULTS_DIR / "calibration.json")
+    ap.add_argument(
+        "--out", type=Path, default=None,
+        help="default: results/calibration.json, or results/calibration_quick.json when --max-pairs is set "
+        "(a quick subset must never overwrite the full calibration)",
+    )
+    ap.add_argument("--threads", type=int, default=None, help="ORT intra-op threads (default: $FACECLOAK_THREADS or 8)")
     a = ap.parse_args()
+    global THREADS
+    if a.threads:
+        THREADS = max(1, a.threads)
+    if a.out is None:
+        a.out = RESULTS_DIR / ("calibration_quick.json" if a.max_pairs else "calibration.json")
     t0 = time.time()
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -175,8 +142,10 @@ def main() -> None:
         pairs = sub
     print(f"{len(pairs)} pairs, root={root}")
     assert images_dir(root).is_dir()
+    pre = images_dir(root).relative_to(root).as_posix()
+    pre = "" if pre == "." else pre
 
-    imgs = sorted({rel(p[s]) for p in pairs for s in ("a", "b")})
+    imgs = sorted({rel(p[s], pre) for p in pairs for s in ("a", "b")})
 
     # ---- detection (shared across models, cached)
     det_cache_f = CACHE_DIR / "lfw_det_cache.json"
@@ -195,9 +164,9 @@ def main() -> None:
     ok = {r for r in imgs if det_cache.get(r)}
     print(f"detected {len(ok)}/{len(imgs)} images ({time.time() - t0:.0f}s)")
 
-    valid = [p for p in pairs if rel(p["a"]) in ok and rel(p["b"]) in ok]
+    valid = [p for p in pairs if rel(p["a"], pre) in ok and rel(p["b"], pre) in ok]
     n_skipped = len(pairs) - len(valid)
-    need = sorted({rel(p[s]) for p in valid for s in ("a", "b")})
+    need = sorted({rel(p[s], pre) for p in valid for s in ("a", "b")})
     labels = np.array([p["label"] for p in valid])
     folds = np.array([p["fold"] for p in valid])
 
@@ -220,7 +189,7 @@ def main() -> None:
                 if n % CHECKPOINT_EVERY == 0:
                     save_cache(cache_f, cache)
             save_cache(cache_f, cache)
-        sims = np.array([float(cache[rel(p["a"])] @ cache[rel(p["b"])]) for p in valid])
+        sims = np.array([float(cache[rel(p["a"], pre)] @ cache[rel(p["b"], pre)]) for p in valid])
         g, i = sims[labels == 1], sims[labels == 0]
         tau1, tau01 = calibrate_far(g, i, 0.01), calibrate_far(g, i, 0.001)
         e, tau_e = eer(g, i)

@@ -30,3 +30,22 @@ flagged/
 .DS_Store
 report/*.pdf
 slides/*.pdf
+# secrets / misc artifacts
+.env*
+*.safetensors
+*.bin
+*.ckpt
+*.part
+*.npz
+.ipynb_checkpoints/
+cloudflared
+# web
+node_modules/
+.vercel/
+.next/
+# real-identity deepfake grids must never be published
+results/figs/qualitative*
+web/public/results/qualitative*
+results/old/
+results/figs/
+results/tables/
