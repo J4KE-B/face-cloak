@@ -76,6 +76,33 @@ release URL and verify sha256 `d33ff2d14475178d2012c2c56beba87389ac5ded27649519f
 checksum published in that release's notes (and equals the GitHub asset digest). To bump: change the version and
 copy the new checksum from the release page in both files.
 
+## API (all `/api/*` need `X-Demo-Key`; JSON models in `schema.py`, OpenAPI in `openapi.json`)
+
+* `GET /health` (no auth) -> `Health`
+* `GET /api/targets` -> `Target[]`
+* `POST /api/jobs` multipart: `photo` (required), `reference` (optional second photo of the same person; else the
+  original upload is the reference and `scores.reference="self"`), `target_id`, `eps` (2..16, default 8),
+  `steps` (1..200, default 30 CPU / 100 CUDA), `mode` (`fast` | `robust`) -> 202 `JobCreated`
+* `GET /api/jobs/{id}` -> `JobStatus` (poll every ~1 s); `DELETE /api/jobs/{id}` -> 204 (cancels if queued/running)
+* Errors are `{"detail": "..."}`: 400 no face, 401, 404, 413 too large (>5 MB or >40 MP), 415 not JPEG/PNG/WebP,
+  422 bad parameter or tiny image, 429 rate limit, 503 queue full.
+
+`protected = id_sim_cloaked < tau and id_sim_original >= tau`. If the swap of the *unprotected* photo does not match
+the reference, `protected` is `null` and `note` explains the test was inconclusive. If the attacker cannot detect any
+face in the cloaked photo, `swap_cloaked`/`id_sim_cloaked` are `null` and `protected` is `true`. `tau` is the glintr100
+FAR=1% threshold from `results/calibration.json` (else `calibration_quick.json`).
+
+## Design notes
+
+* **One heavy job at a time.** A single worker thread consumes an in-memory FIFO. Face detection of the upload runs in
+  the request thread (cheap, ONNX sessions are thread-safe) so "no face" is an immediate 400.
+* **Progress is real.** `Cloaker.cloak` has no callback, so `RealEngine` wraps each attack recognizer in a transparent
+  proxy that counts grad-enabled `embed_image` calls (exactly one per model per PGD step) and reports `step/total`.
+  No change to the core package.
+* **Models load once** in the lifespan handler (CUDA if available). `Engine` is a protocol; tests inject `StubEngine`.
+* **Perturbation image** = `|cloaked - original| x 10`, clipped to 0..255.
+* **Images** are decoded with PIL (EXIF orientation applied, so no double rotation), downscaled to <=1024 px.
+
 ## Tests / schema
 
 ```bash
