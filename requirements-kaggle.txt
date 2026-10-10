@@ -2,7 +2,7 @@
 # with CUDA -- do NOT install torch here. Install the project itself with:
 #   pip install -r requirements-kaggle.txt && pip install --no-deps -e .
 onnx
-onnxruntime-gpu
+onnxruntime-gpu==1.26.0  # last CUDA-12 build (1.27+ need CUDA 13); Kaggle torch is cu128
 insightface==0.7.3
 onnx2torch
 lpips
