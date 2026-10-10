@@ -29,6 +29,7 @@ from facecloak.data import (
     manifest_identities,
 )
 from facecloak.metrics import calibrate_far, eer, kfold_accuracy, tar_at
+from facecloak.models import ort_providers
 from facecloak.paths import CACHE_DIR, RESULTS_DIR, WEIGHTS_DIR
 
 MODELS: dict[str, Path] = {
@@ -79,11 +80,11 @@ def load_recognizer(path: Path):
     so.intra_op_num_threads = THREADS
     so.inter_op_num_threads = 1
     so.log_severity_level = 3
-    m = model_zoo.get_model(str(path), providers=["CPUExecutionProvider"], sess_options=so)
+    m = model_zoo.get_model(str(path), providers=ort_providers(), sess_options=so)
     m.prepare(ctx_id=-1)
     # prepare() calls session.set_providers(), which silently drops sess_options (=> all cores);
     # rebuild the session so the thread cap really applies.
-    m.session = ort.InferenceSession(str(path), so, providers=["CPUExecutionProvider"])
+    m.session = ort.InferenceSession(str(path), so, providers=ort_providers())
     return m
 
 

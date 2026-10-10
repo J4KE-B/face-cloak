@@ -29,6 +29,20 @@ def num_threads() -> int:
     return max(1, min(8, int(os.environ.get("FACECLOAK_THREADS", "8"))))
 
 
+def ort_providers() -> list[str]:
+    """onnxruntime providers: CUDA first when env FACECLOAK_ORT_GPU=1 and it is available, else CPU.
+
+    Off by default so laptop runs stay on CPU; the Kaggle notebooks set it so every result in a run
+    is computed with the same provider.
+    """
+    if os.environ.get("FACECLOAK_ORT_GPU") == "1":
+        import onnxruntime as ort
+
+        if "CUDAExecutionProvider" in ort.get_available_providers():
+            return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    return ["CPUExecutionProvider"]
+
+
 def _configure_torch() -> None:
     torch.set_num_threads(num_threads())
 
@@ -44,7 +58,7 @@ def load_face_app(det_size: tuple[int, int] = (640, 640), providers: list[str] |
         name="buffalo_l",
         root=str(WEIGHTS_DIR),
         allowed_modules=["detection"],
-        providers=providers or ["CPUExecutionProvider"],
+        providers=providers or ort_providers(),
     )
     app.prepare(ctx_id=-1, det_size=det_size)
     return app
@@ -165,7 +179,7 @@ class ORTRecognizer:
         so.log_severity_level = 3
         so.intra_op_num_threads = num_threads()
         so.inter_op_num_threads = 1
-        self.session = ort.InferenceSession(str(path), so, providers=providers or ["CPUExecutionProvider"])
+        self.session = ort.InferenceSession(str(path), so, providers=providers or ort_providers())
         cfg = self.session.get_inputs()[0]
         self.input_name = cfg.name
         self.input_size = int(cfg.shape[2])
