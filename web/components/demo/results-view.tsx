@@ -41,7 +41,7 @@ function ScoreBar({ label, value, tau }: { label: string; value: number | null; 
   // Below tau the judge says "someone else" (green); at or above tau it says "still you" (red).
   const tone = value == null || tau == null ? "neutral" : value < tau ? "ok" : "bad";
   return (
-    <div>
+    <div className={tau != null ? "pb-5" : undefined}>
       <div className="mb-1.5 flex items-baseline justify-between text-sm">
         <span>{label}</span>
         <span className="font-mono">{value == null ? "n/a" : <NumberTicker value={value} decimals={3} />}</span>
@@ -58,7 +58,7 @@ function ScoreBar({ label, value, tau }: { label: string; value: number | null; 
         />
         {tau != null && (
           <div className="absolute -top-1.5 -bottom-1.5 w-0.5 bg-white" style={{ left: `${clamp(tau) * 100}%` }}>
-            <span className="absolute -top-5 left-1/2 -translate-x-1/2 font-mono text-[11px] whitespace-nowrap text-white/80">τ {tau.toFixed(2)}</span>
+            <span className="absolute top-full mt-1 left-1/2 -translate-x-1/2 font-mono text-[11px] whitespace-nowrap text-white/80">τ {tau.toFixed(2)}</span>
           </div>
         )}
       </div>
