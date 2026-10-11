@@ -32,7 +32,7 @@ export function FileDrop({
     e.preventDefault();
     setOver(false);
     const f = e.dataTransfer.files[0];
-    if (f) onFile(f);
+    if (f && !busy) onFile(f);
   };
 
   return (
@@ -58,11 +58,12 @@ export function FileDrop({
           ref={input}
           id={id}
           type="file"
+          disabled={busy}
           accept="image/jpeg,image/png,image/webp"
           className="sr-only"
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) onFile(f);
+            if (f && !busy) onFile(f);
             e.target.value = "";
           }}
         />

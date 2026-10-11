@@ -9,9 +9,11 @@ import { PageHeader } from "@/components/ui/section";
 import { ShimmerButton } from "@/components/ui/shimmer-button";
 import { useToast } from "@/components/toast";
 import { prepareImage, ImageError, type PreparedImage } from "@/lib/image";
+import type { Example } from "@/lib/examples";
 import { hostOf } from "@/lib/backend";
 import type { Mode } from "@/lib/types";
 import { BackendPanel } from "./backend-panel";
+import { ExamplePicker } from "./example-picker";
 import { Controls } from "./controls";
 import { FileDrop } from "./file-drop";
 import { ResultsSkeleton, ResultsView } from "./results-view";
@@ -50,6 +52,8 @@ export function DemoClient() {
   const [mode, setMode] = useState<Mode>("fast");
   const [consent, setConsent] = useState(false);
   const [linkAsk, setLinkAsk] = useState(false);
+  const [exampleId, setExampleId] = useState<string | null>(null);
+  const [exampleLoading, setExampleLoading] = useState<string | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
   const reduce = useReducedMotion();
   const photoRef = useRef<PreparedImage | null>(null);
@@ -58,34 +62,62 @@ export function DemoClient() {
   const h = b.health;
   const eps = Math.min(epsV ?? 8, h?.max_eps ?? 16);
   const steps = Math.min(stepsV ?? h?.default_steps ?? 40, h?.max_steps ?? 60);
-  const target = targetId ?? b.targets[0]?.id ?? null;
+  // a remembered / example-recommended id only counts if this backend actually offers it
+  const target = (targetId && b.targets.some((t) => t.id === targetId) ? targetId : b.targets[0]?.id) ?? null;
   const online = b.phase === "online";
   const running = job.phase === "submitting" || job.phase === "active";
+
+  const commit = useCallback((which: "photo" | "reference", img: PreparedImage | null) => {
+    const slot = which === "photo" ? photoRef : refRef;
+    if (slot.current) URL.revokeObjectURL(slot.current.previewUrl);
+    slot.current = img;
+    (which === "photo" ? setPhoto : setReference)(img);
+  }, []);
 
   const pick = useCallback(
     async (f: File, which: "photo" | "reference") => {
       setBusy(which);
       try {
         const img = await prepareImage(f);
-        const set = which === "photo" ? setPhoto : setReference;
-        const slot = which === "photo" ? photoRef : refRef;
-        if (slot.current) URL.revokeObjectURL(slot.current.previewUrl);
-        slot.current = img;
-        set(img);
+        if (exampleId) {
+          // leaving an example: its reference photo belongs to the example person, not to this upload
+          if (which === "photo") commit("reference", null);
+          setExampleId(null);
+        }
+        commit(which, img);
       } catch (e) {
         toast({ kind: "error", title: "Cannot use that file", message: e instanceof ImageError ? e.message : "The image could not be read." });
       } finally {
         setBusy(null);
       }
     },
-    [toast],
+    [toast, commit, exampleId],
   );
 
   const clear = (which: "photo" | "reference") => {
-    const slot = which === "photo" ? photoRef : refRef;
-    if (slot.current) URL.revokeObjectURL(slot.current.previewUrl);
-    slot.current = null;
-    (which === "photo" ? setPhoto : setReference)(null);
+    if (exampleId) setExampleId(null);
+    commit(which, null);
+  };
+
+  const loadExample = async (ex: Example) => {
+    setExampleLoading(ex.id);
+    try {
+      const get = async (url: string, name: string) => {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return prepareImage(new File([await r.blob()], name, { type: "image/jpeg" }));
+      };
+      // prepare both before touching the form, so a failure never leaves it half-switched
+      const [a, ref] = await Promise.all([get(ex.photo, `${ex.id}_a.jpg`), get(ex.reference, `${ex.id}_b.jpg`)]);
+      commit("photo", a);
+      commit("reference", ref);
+      setTargetId(ex.target);
+      setExampleId(ex.id);
+    } catch {
+      toast({ kind: "error", title: "Example unavailable", message: "The example photos could not be loaded." });
+    } finally {
+      setExampleLoading(null);
+    }
   };
   useEffect(
     () => () => {
@@ -147,12 +179,13 @@ export function DemoClient() {
         {(b.phase === "offline" || b.phase === "idle" || b.phase === "checking") && b.hydrated && <StartBackend />}
 
         <Step n={1} title="Your photo">
+          <ExamplePicker selected={exampleId} loading={exampleLoading} disabled={running || busy !== null} onSelect={(ex) => void loadExample(ex)} />
           <div className="grid gap-5 md:grid-cols-2">
             <FileDrop
               label="Your photo"
               hint="One clear, front-facing face. Resized to 1024 px and re-encoded in your browser; location data is removed."
               value={photo}
-              busy={busy === "photo"}
+              busy={busy === "photo" || exampleLoading !== null}
               onFile={(f) => void pick(f, "photo")}
               onClear={() => clear("photo")}
             />
@@ -161,7 +194,7 @@ export function DemoClient() {
               optional
               hint="A different photo of the same person. It makes the verdict honest: the judge compares the swap against this photo, not the one we cloaked."
               value={reference}
-              busy={busy === "reference"}
+              busy={busy === "reference" || exampleLoading !== null}
               onFile={(f) => void pick(f, "reference")}
               onClear={() => clear("reference")}
             />

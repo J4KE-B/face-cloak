@@ -6,3 +6,6 @@ next-env.d.ts
 .env*.local
 .vercel
 .env*
+
+# written by `next dev`
+AGENTS.md

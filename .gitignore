@@ -49,3 +49,6 @@ web/public/results/qualitative*
 results/old/
 results/figs/
 results/tables/
+
+# Kaggle shard downloads (contain real LFW faces)
+results/kaggle_shard*/
