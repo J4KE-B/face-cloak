@@ -19,6 +19,8 @@ running the demo, reading the result, privacy and troubleshooting.
 
 | Guide | For |
 |---|---|
+| [docs/REPORT.md](docs/REPORT.md) | **Full project report** (method, setup, results, discussion, limitations) |
+| [docs/PRESENTATION_BRIEF.md](docs/PRESENTATION_BRIEF.md) | Everything needed to build the slides: outline, speaker notes, key numbers, diagrams, demo runbook, viva Q&A |
 | [docs/WEBSITE_GUIDE.md](docs/WEBSITE_GUIDE.md) | Presenting / trying the live demo |
 | [KAGGLE_RUN.md](KAGGLE_RUN.md) | Running the full experiments on a free Kaggle GPU |
 | [server/README.md](server/README.md) | Demo backend (FastAPI): configuration, API, security |
